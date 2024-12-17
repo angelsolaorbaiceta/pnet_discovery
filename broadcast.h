@@ -1,10 +1,12 @@
 #ifndef BROADCAST_H
 #define BROADCAST_H
 
+#include "protocol.h"
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <pthread.h>
+#include <pwd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -17,10 +19,13 @@
 #define RESPONSE_PORT 9006
 #define MAX_PEERS 10
 #define DISCOVERY_INTERVAL 5
+#define BROADCAST_IP "255.255.255.255"
 
 // Each of the discovered peers.
 typedef struct {
   char ip[INET_ADDRSTRLEN];
+  char token[TOKEN_LENGTH + 1];
+  char username[MAX_USERNAME_LENGTH + 1];
   time_t last_seen;
 } Peer;
 
@@ -28,14 +33,33 @@ typedef struct {
 extern Peer peers[MAX_PEERS];
 extern int peer_count;
 extern pthread_mutex_t peers_mutex;
+extern char my_token[TOKEN_LENGTH + 1];
+extern char my_username[MAX_USERNAME_LENGTH + 1];
 
 // ----- Functions ----- //
 
 /**
- * Updates or adds the peer to the peers list, if the maximum
- * number of peers hasn't been reached yet.
+ * Inits the token with random alphanumeric characters and sets the computer
+ * user name as the program's username.
  */
-void update_peer(const char *ip);
+void init_my_info(void);
+
+/**
+ * Initializes the peer struct instance, setting its IP address, identifier
+ * token and name.
+ */
+void init_peer(Peer *peer, const char *ip, const char *token,
+               const char *username);
+
+/**
+ * Updates or adds the peer to the peers list.
+ * Peers are identified by their unique token, so even when their IP changes,
+ * they can still be identified as being the same.
+ *
+ * It can only add the peer if the maximum number of peers hasn't been reached
+ * yet.
+ */
+void update_peer(const char *ip, const char *token, const char *username);
 
 /**
  * Thread function to handle incoming broadcast messages.

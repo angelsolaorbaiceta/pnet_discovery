@@ -6,6 +6,9 @@
 int main() {
   pthread_t broadcast_thread, sender_thread, response_thread;
 
+  init_my_info();
+  printf("Hello %s! Your token is %s\n", my_username, my_token);
+
   pthread_create(&broadcast_thread, NULL, handle_broadcast, NULL);
   pthread_create(&sender_thread, NULL, send_broadcast, NULL);
   pthread_create(&response_thread, NULL, handle_responses, NULL);
