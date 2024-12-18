@@ -241,6 +241,75 @@ int deserialize_message(const uint8_t *buffer, struct PeerMessage *msg) {
 }
 ```
 
+Now, were going to need a function that calculates the size of a message, so we can include that information as part of the message itself.
+Let's write a `calculate_message_length()` function for it.
+As we know, the size of a message is 3 bytes (1 for the header, plus 1 for the message size, and 1 for the username length), plus the token length (10 bytes), plus the length of the username.
+
+```c
+/* protocol.c */
+
+uint8_t calculate_message_length(struct PeerMessage *msg) {
+  // 1 byte header + 1 byte length + TOKEN_LENGTH + 1 byte username length +
+  // username
+  return 3 + TOKEN_LENGTH + msg->username_length;
+}
+```
+
+And last, it's going to be handy if we write a function that creates a broadcast message and serializes it.
+Let's call this function `serialized_response()`.
+We need to pass it the users token and name, as well as the buffer to serialize the message to.
+
+```c
+/* protocol.h */
+
+int serialized_broadcast(char *token, char *username, uint8_t *buffer) {
+  struct PeerMessage msg = {
+      .header = {.version = PROTOCOL_VERSION, .is_response = 0, .flags = 0},
+      .username_length = strlen(username)};
+
+  strncpy(msg.token, token, TOKEN_LENGTH);
+  strncpy(msg.username, username, msg.username_length);
+  msg.username[msg.username_length] = '\0';
+  msg.length = calculate_message_length(&msg);
+
+  serialize_message(&msg, buffer);
+
+  return msg.length;
+}
+```
+
+Note the message's `is_response` field is set to `0`, signaling this message is a broadcast message.
+The function returns the message's length, but keeps the message for itself.
+This means that the message is allocated in the function's stack, and thus "deallocated" when the function returns.
+
+Let's create a similar function, but to serialize response messages.
+We'll--obviously--call it `serialized_response()`:
+
+```c
+/* protocol.c */
+
+int serialized_response(char *token, char *username, uint8_t *buffer) {
+  struct PeerMessage response = {
+      .header = {.version = PROTOCOL_VERSION, .is_response = 1, .flags = 0},
+      .username_length = strlen(username)};
+  strncpy(response.token, token, TOKEN_LENGTH);
+  strncpy(response.username, username, response.username_length);
+  response.username[response.username_length] = '\0';
+  response.length = calculate_message_length(&response);
+
+  serialize_message(&response, buffer);
+
+  return response.length;
+}
+```
+
+The only notable difference here is that the `is_response` field is set to `1` in this occasion, signaling this is a response message.
+
+Let's focus on sending the messages over a UDP connection.
+
+
+### Broadcast and response UDP messages
+
 
 ## Reference
 
