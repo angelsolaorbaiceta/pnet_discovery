@@ -75,7 +75,7 @@ void generate_token(char *token);
  * Serializes the message to bytes and stores the result in the passed in
  * buffer.
  */
-size_t serialize_message(const struct PeerMessage *msg, uint8_t *buffer);
+void serialize_message(const struct PeerMessage *msg, uint8_t *buffer);
 
 /**
  * Deserializes the bytes in the buffer into a message.

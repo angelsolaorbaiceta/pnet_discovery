@@ -15,7 +15,7 @@ void generate_token(char *token) {
   token[TOKEN_LENGTH] = '\0';
 }
 
-size_t serialize_message(const struct PeerMessage *msg, uint8_t *buffer) {
+void serialize_message(const struct PeerMessage *msg, uint8_t *buffer) {
   // First byte: message header
   buffer[0] = (msg->header.version << 4) | (msg->header.is_response << 3) |
               (msg->header.flags);
@@ -31,8 +31,6 @@ size_t serialize_message(const struct PeerMessage *msg, uint8_t *buffer) {
 
   // Username
   memcpy(buffer + TOKEN_LENGTH + 3, msg->username, msg->username_length);
-
-  return msg->length;
 }
 
 int deserialize_message(const uint8_t *buffer, struct PeerMessage *msg) {
@@ -83,12 +81,7 @@ int serialized_response(char *token, char *username, uint8_t *buffer) {
   response.username[response.username_length] = '\0';
   response.length = calculate_message_length(&response);
 
-  uint8_t response_buffer[MAX_MESSAGE_LENGTH];
-
-  int res = serialize_message(&response, response_buffer);
-  if (res < 0) {
-    return res;
-  }
+  serialize_message(&response, buffer);
 
   return response.length;
 }
