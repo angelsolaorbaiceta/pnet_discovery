@@ -1,6 +1,6 @@
 #include "broadcast.h"
+#include "netutils.h"
 #include "protocol.h"
-#include <string.h>
 
 // Initialize global variables
 Peer peers[MAX_PEERS];
@@ -73,26 +73,8 @@ void update_peer(const char *ip, const char *token, const char *username) {
 }
 
 void *handle_broadcast(void *arg) {
-  int sock = socket(AF_INET, SOCK_DGRAM, 0);
+  int sock = bind_broadcast_socket(BROADCAST_PORT);
   if (sock < 0) {
-    perror("socket() failed");
-    exit(EXIT_FAILURE);
-  }
-
-  // Enable broadcast
-  int broadcast = 1;
-  if (setsockopt(sock, SOL_SOCKET, SO_BROADCAST, &broadcast,
-                 sizeof(broadcast)) < 0) {
-    perror("setsockopt() failed");
-    exit(EXIT_FAILURE);
-  }
-
-  struct sockaddr_in addr = {.sin_family = AF_INET,
-                             .sin_port = htons(BROADCAST_PORT),
-                             .sin_addr.s_addr = INADDR_ANY};
-
-  if (bind(sock, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-    perror("bind() failed");
     exit(EXIT_FAILURE);
   }
 

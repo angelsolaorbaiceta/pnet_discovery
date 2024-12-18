@@ -1,6 +1,7 @@
 #ifndef BROADCAST_H
 #define BROADCAST_H
 
+#include "netutils.h"
 #include "protocol.h"
 #include <arpa/inet.h>
 #include <netdb.h>
