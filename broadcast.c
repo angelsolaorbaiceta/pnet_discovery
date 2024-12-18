@@ -150,19 +150,11 @@ void *send_broadcast(void *arg) {
                              .sin_port = htons(BROADCAST_PORT),
                              .sin_addr.s_addr = inet_addr(BROADCAST_IP)};
 
-  struct PeerMessage msg = {
-      .header = {.version = PROTOCOL_VERSION, .is_response = 0, .flags = 0},
-      .username_length = strlen(my_username)};
-  strncpy(msg.token, my_token, TOKEN_LENGTH);
-  strncpy(msg.username, my_username, msg.username_length);
-  msg.username[msg.username_length] = '\0';
-  msg.length = calculate_message_length(&msg);
-
   uint8_t buffer[MAX_MESSAGE_LENGTH];
+  int msg_length = serialized_broadcast(my_token, my_username, buffer);
 
   while (1) {
-    serialize_message(&msg, buffer);
-    sendto(sock, buffer, msg.length, 0, (struct sockaddr *)&addr, sizeof(addr));
+    sendto(sock, buffer, msg_length, 0, (struct sockaddr *)&addr, sizeof(addr));
 
     // TODO: cleanup stale peers
 

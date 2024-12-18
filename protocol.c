@@ -92,3 +92,18 @@ int serialized_response(char *token, char *username, uint8_t *buffer) {
 
   return response.length;
 }
+
+int serialized_broadcast(char *token, char *username, uint8_t *buffer) {
+  struct PeerMessage msg = {
+      .header = {.version = PROTOCOL_VERSION, .is_response = 0, .flags = 0},
+      .username_length = strlen(username)};
+
+  strncpy(msg.token, token, TOKEN_LENGTH);
+  strncpy(msg.username, username, msg.username_length);
+  msg.username[msg.username_length] = '\0';
+  msg.length = calculate_message_length(&msg);
+
+  serialize_message(&msg, buffer);
+
+  return msg.length;
+}

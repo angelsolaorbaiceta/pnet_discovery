@@ -97,4 +97,10 @@ uint8_t calculate_message_length(struct PeerMessage *msg);
  */
 int serialized_response(char *token, char *username, uint8_t *buffer);
 
+/**
+ * Creates the broadcast message and serializes it into the buffer.
+ * The length of the messge is returned.
+ */
+int serialized_broadcast(char *token, char *username, uint8_t *buffer);
+
 #endif
