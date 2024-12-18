@@ -116,19 +116,16 @@ void *handle_broadcast(void *arg) {
       }
 
       // Send response to broadcast messages
-      struct PeerMessage response = {
-          .header = {.version = PROTOCOL_VERSION, .is_response = 1, .flags = 0},
-          .username_length = strlen(my_username)};
-      strncpy(response.token, my_token, TOKEN_LENGTH);
-      strncpy(response.username, my_username, response.username_length);
-      response.username[response.username_length] = '\0';
-      response.length = calculate_message_length(&response);
-
       uint8_t response_buffer[MAX_MESSAGE_LENGTH];
-      serialize_message(&response, response_buffer);
+      int res_length =
+          serialized_response(my_token, my_username, response_buffer);
+      if (res_length < 0) {
+        fprintf(stderr, "There was a problem serializing the response.\n");
+        exit(EXIT_FAILURE);
+      }
 
       sender_addr.sin_port = htons(RESPONSE_PORT);
-      sendto(response_sock, response_buffer, response.length, 0,
+      sendto(response_sock, response_buffer, res_length, 0,
              (struct sockaddr *)&sender_addr, sizeof(sender_addr));
     }
   }

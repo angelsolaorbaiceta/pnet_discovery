@@ -1,6 +1,4 @@
 #include "protocol.h"
-#include <string.h>
-#include <time.h>
 
 static const char charset[] = "0123456789"
                               "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -74,4 +72,23 @@ uint8_t calculate_message_length(struct PeerMessage *msg) {
   // 1 byte header + 1 byte length + TOKEN_LENGTH + 1 byte username length +
   // username
   return 3 + TOKEN_LENGTH + msg->username_length;
+}
+
+int serialized_response(char *token, char *username, uint8_t *buffer) {
+  struct PeerMessage response = {
+      .header = {.version = PROTOCOL_VERSION, .is_response = 1, .flags = 0},
+      .username_length = strlen(username)};
+  strncpy(response.token, token, TOKEN_LENGTH);
+  strncpy(response.username, username, response.username_length);
+  response.username[response.username_length] = '\0';
+  response.length = calculate_message_length(&response);
+
+  uint8_t response_buffer[MAX_MESSAGE_LENGTH];
+
+  int res = serialize_message(&response, response_buffer);
+  if (res < 0) {
+    return res;
+  }
+
+  return response.length;
 }

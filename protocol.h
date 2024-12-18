@@ -3,6 +3,8 @@
 
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
+#include <time.h>
 
 // Protocol constants
 #define PROTOCOL_VERSION 0x01
@@ -86,5 +88,13 @@ size_t serialize_message(const struct PeerMessage *msg, uint8_t *buffer);
 int deserialize_message(const uint8_t *buffer, struct PeerMessage *msg);
 
 uint8_t calculate_message_length(struct PeerMessage *msg);
+
+/**
+ * Creates the response message and serializes it into the buffer.
+ *
+ * Returns the message length if all goes well, and a negative number (see
+ * `deserialize_message`) if there's an error in the serialization process.
+ */
+int serialized_response(char *token, char *username, uint8_t *buffer);
 
 #endif
