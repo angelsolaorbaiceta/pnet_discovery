@@ -310,6 +310,118 @@ Let's focus on sending the messages over a UDP connection.
 
 ### Broadcast and response UDP messages
 
+Let's start by declaring the peers array--with size `MAX_PEERS`--, the peers count, and a mutex to synchronize access to the peers array.
+There'll be different threads in our program, so we need a means of synchronization.
+
+```c
+/* broadcast.c */
+
+// Initialize global variables
+Peer peers[MAX_PEERS];
+int peer_count = 0;
+pthread_mutex_t peers_mutex = PTHREAD_MUTEX_INITIALIZER;
+```
+
+Next, lets declare two arrays: one for the user token and another for the username.
+
+```c
+/* broadcast.c */
+
+// Our identity info
+char my_token[TOKEN_LENGTH + 1];
+char my_username[MAX_USERNAME_LENGTH + 1];
+```
+
+Let's write a function to initialize these two pieces of information when the program starts.
+We'll call it `init_my_info()`.
+Generating the token is straightforward using the function we wrote earlier: `generate_token()`.
+To get the username, we use the `getpwuid()` function call, wich reads the _/etc/passwd_ file and returns the fields for a given user id.
+
+```c
+/* broadcast.c */
+
+void init_my_info(void) {
+  generate_token(my_token);
+
+  struct passwd *pw = getpwuid(getuid());
+  if (pw) {
+    strcpy(my_username, pw->pw_name);
+  } else {
+    strcpy(my_username, "Unknown");
+  }
+}
+```
+
+Similarly, a function to initialize a `Peer` struct will be handy:
+
+```c
+/* broadcast.c */
+
+void init_peer(Peer *peer, const char *ip, const char *token,
+               const char *username) {
+  strncpy(peer->ip, ip, INET_ADDRSTRLEN);
+  peer->ip[INET_ADDRSTRLEN - 1] = '\0';
+
+  strncpy(peer->token, token, TOKEN_LENGTH);
+  peer->token[TOKEN_LENGTH] = '\0';
+
+  strncpy(peer->username, username, MAX_USERNAME_LENGTH);
+  peer->username[MAX_USERNAME_LENGTH] = '\0';
+
+  peer->last_seen = time(NULL);
+}
+```
+
+Now, let's get to the meat of the implementation.
+We'll first implement a function to add or update a peer as their response message is received.
+This function, let's call it `update_peer()` receives an IP, a token and a username and:
+
+1. Looks in the peers array to check if a peer with such a token exists.
+2. If it exists, we update its last seen timestamp and its IP and username, in case they have changed.
+3. If the peer wasn't registered, it checks if there's room for one more peer, and adds it into the array.
+
+Here's the implementation:
+
+```c
+/* broadcast.c */
+
+void update_peer(const char *ip, const char *token, const char *username) {
+  pthread_mutex_lock(&peers_mutex);
+
+  // Check if peer already exists by token.
+  // Update the last_seen, IP and username if so.
+  int found = 0;
+  for (int i = 0; i < peer_count; i++) {
+    if (strcmp(peers[i].token, token) == 0) {
+      peers[i].last_seen = time(NULL);
+
+      // Check if the IP has changed
+      if (strcmp(peers[i].ip, ip)) {
+        strncpy(peers[i].ip, ip, INET_ADDRSTRLEN - 1);
+        peers[i].ip[INET_ADDRSTRLEN - 1] = '\0';
+      }
+
+      // Check if the username has changed
+      if (strcmp(peers[i].username, username)) {
+        strncpy(peers[i].username, username, MAX_USERNAME_LENGTH);
+        peers[i].username[MAX_USERNAME_LENGTH] = '\0';
+      }
+
+      found = 1;
+      break;
+    }
+  }
+
+  // If the peer is new, add it if there is space
+  if (!found && peer_count < MAX_PEERS) {
+    init_peer(&peers[peer_count], ip, token, username);
+    peer_count++;
+  }
+
+  pthread_mutex_unlock(&peers_mutex);
+}
+
+```
 
 ## Reference
 
