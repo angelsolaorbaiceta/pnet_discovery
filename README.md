@@ -423,6 +423,214 @@ void update_peer(const char *ip, const char *token, const char *username) {
 
 ```
 
+Let's now write a funtion to be run in a thread, that listents to broadcast messages by and responds to them.
+
+> [!NOTE]
+> A function that's designed to run in a thread returns a pointer to void and accepts its arguments as a pointer to void.
+
+We'll need two different sockets:
+
+1. A UDP broadcast socket to receive the broadast messages (we'll call it simply `sock`).
+2. A UDP socket to send unicast response messages to peers who sent a broadcast message (we'll cal this one `response_sock`).
+
+Creting a broadcast UDP socket involves a few lines of C code, so I decided to write a function `bind_broadcast_socket()` that does it.
+This function does three things: 
+
+1. Creates the socket. 
+2. Enables broadcasting.
+3. Binds the socket to localhost, at the port passed as argument.
+
+Here's the function:
+
+```c
+/* netutils.c */
+
+int bind_broadcast_socket(int port) {
+  int sock = socket(AF_INET, SOCK_DGRAM, 0);
+  if (sock < 0) {
+    perror("socket() failed");
+    return -1;
+  }
+
+  // Enable broadcast
+  int broadcastEnabled = 1;
+  if (setsockopt(sock, SOL_SOCKET, SO_BROADCAST, &broadcastEnabled,
+                 sizeof(broadcastEnabled)) < 0) {
+    perror("setsockopt() failed");
+    return -1;
+  }
+
+  struct sockaddr_in addr = {.sin_family = AF_INET,
+                             .sin_port = htons(port),
+                             .sin_addr.s_addr = INADDR_ANY};
+
+  if (bind(sock, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+    perror("bind() failed");
+    return -1;
+  }
+
+  return sock;
+}
+```
+
+With it, we can now turn our attention to implementing `handle_broadcast()`.
+Care must be taken to not respond to our own messages.
+We just need to check if the token in the message is the same as ours.
+
+```c
+/* broadcast.c */
+
+void *handle_broadcast(void *arg) {
+  int sock = bind_broadcast_socket(BROADCAST_PORT);
+  if (sock < 0) {
+    exit(EXIT_FAILURE);
+  }
+
+  // Create the response socket
+  int response_sock = socket(AF_INET, SOCK_DGRAM, 0);
+  if (response_sock < 1) {
+    perror("socket() failed");
+    exit(EXIT_FAILURE);
+  }
+
+  uint8_t buffer[MAX_MESSAGE_LENGTH];
+  struct PeerMessage msg;
+
+  while (1) {
+    struct sockaddr_in sender_addr;
+    socklen_t addr_len = sizeof(sender_addr);
+
+    // Receive broadcast message
+    ssize_t recv_len = recvfrom(sock, buffer, sizeof(buffer), 0,
+                                (struct sockaddr *)&sender_addr, &addr_len);
+
+    if (recv_len > 0) {
+      // Skip if there's a deserialization error
+      if (deserialize_message(buffer, &msg)) {
+        continue;
+      }
+
+      char sender_ip[INET_ADDRSTRLEN];
+      inet_ntop(AF_INET, &(sender_addr.sin_addr), sender_ip, INET_ADDRSTRLEN);
+
+      // Don't respond to our own broadcasts
+      if (strcmp(msg.token, my_token) == 0) {
+        continue;
+      }
+
+      // Ignore response messages
+      if (msg.header.is_response) {
+        continue;
+      }
+
+      // Send response to broadcast messages
+      uint8_t response_buffer[MAX_MESSAGE_LENGTH];
+      int res_length =
+          serialized_response(my_token, my_username, response_buffer);
+      if (res_length < 0) {
+        fprintf(stderr, "There was a problem serializing the response.\n");
+        exit(EXIT_FAILURE);
+      }
+
+      sender_addr.sin_port = htons(RESPONSE_PORT);
+      sendto(response_sock, response_buffer, res_length, 0,
+             (struct sockaddr *)&sender_addr, sizeof(sender_addr));
+    }
+  }
+}
+```
+
+Now we need a way of sending broadcast messages ourselves.
+Let's write a `send_broadcast()` function for this.
+This function will run in a thread as well.
+It creates a UDP broadcast socket to send out the broadcast message, and then simply uses the `serialized_broadcast()` function to get the message that's then sent using the `sendto()` function.
+This broadcast message is sent every `DISCOVERY_INTERVAL`.
+
+```c
+/* broadcast.c */
+
+void *send_broadcast(void *arg) {
+  int sock = socket(AF_INET, SOCK_DGRAM, 0);
+  if (sock < 0) {
+    perror("socket() failed");
+    exit(EXIT_FAILURE);
+  }
+
+  // Enable broadcast
+  int broadcast = 1;
+  if (setsockopt(sock, SOL_SOCKET, SO_BROADCAST, &broadcast,
+                 sizeof(broadcast)) < 0) {
+    perror("setsockopt() failed");
+    exit(EXIT_FAILURE);
+  }
+
+  struct sockaddr_in addr = {.sin_family = AF_INET,
+                             .sin_port = htons(BROADCAST_PORT),
+                             .sin_addr.s_addr = inet_addr(BROADCAST_IP)};
+
+  uint8_t buffer[MAX_MESSAGE_LENGTH];
+  int msg_length = serialized_broadcast(my_token, my_username, buffer);
+
+  while (1) {
+    sendto(sock, buffer, msg_length, 0, (struct sockaddr *)&addr, sizeof(addr));
+    sleep(DISCOVERY_INTERVAL);
+  }
+}
+```
+
+Last, we need a function to handle responses.
+This function will be run inside a thread as well.
+When a peer responds to a broadcast message, we include it in our list of peers (if there is room for one more)
+To receive resonse messages we set up a UDP socket and bind it to the `RESPONSE_PORT` (which is different from the broadcast port).
+
+Here's the function:
+
+```c
+/* broadcast.c */
+
+void *handle_responses(void *arg) {
+  // This socket will be bound to the RESPONSE_PORT, and will be used
+  // to listen to responses from peers who respond to this machine's
+  // broadcast message.
+  int sock = socket(AF_INET, SOCK_DGRAM, 0);
+  if (sock < 0) {
+    perror("socket() failed");
+    exit(EXIT_FAILURE);
+  }
+
+  struct sockaddr_in addr = {.sin_family = AF_INET,
+                             .sin_port = htons(RESPONSE_PORT),
+                             .sin_addr.s_addr = INADDR_ANY};
+
+  if (bind(sock, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+    perror("bind() failed");
+    exit(EXIT_FAILURE);
+  }
+
+  uint8_t buffer[MAX_MESSAGE_LENGTH];
+  struct PeerMessage msg;
+
+  while (1) {
+    struct sockaddr_in sender_addr;
+    socklen_t addr_len = sizeof(sender_addr);
+
+    ssize_t bytes_received =
+        recvfrom(sock, buffer, sizeof(buffer), 0,
+                 (struct sockaddr *)&sender_addr, &addr_len);
+
+    if (bytes_received > 0) {
+      if (deserialize_message(buffer, &msg)) {
+        continue;
+      }
+
+      char sender_ip[INET_ADDRSTRLEN];
+      inet_ntop(AF_INET, &(sender_addr.sin_addr), sender_ip, INET_ADDRSTRLEN);
+      update_peer(sender_ip, msg.token, msg.username);
+    }
+  }
+}
+```
+
 ## Reference
 
 - [Beej's Guide to Networking](https://beej.us/guide/bgnet/html/split/index.html)
