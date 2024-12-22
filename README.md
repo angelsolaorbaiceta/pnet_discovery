@@ -631,6 +631,56 @@ void *handle_responses(void *arg) {
 }
 ```
 
+And last, we can write our `main()` function to put it all together.
+
+
+### The main program
+
+In the main function, we want to call the `init_my_info()` function to generate a random token and read the program owner's user name.
+Then, we create three threads:
+
+1. `broadcast_thread`--to handle incoming broadcast messages.
+2. `sender_thread`--to send broadcast messages.
+3. `response_thread`--to handle responses and register new peers.
+
+Then, we keep looping forever (until the program is killed) logging the connected peers every 5 seconds.
+
+Here's the code for the main function:
+
+```c
+/* main.c */
+
+int main() {
+  pthread_t broadcast_thread, sender_thread, response_thread;
+
+  init_my_info();
+  printf("Hello %s! Your token is %s\n", my_username, my_token);
+
+  pthread_create(&broadcast_thread, NULL, handle_broadcast, NULL);
+  pthread_create(&sender_thread, NULL, send_broadcast, NULL);
+  pthread_create(&response_thread, NULL, handle_responses, NULL);
+
+  while (1) {
+    pthread_mutex_lock(&peers_mutex);
+    if (peer_count > 0) {
+      printf("\nCurrent peers (%d):\n", peer_count);
+      for (int i = 0; i < peer_count; i++) {
+        printf("\t%d. %s (last seen: %ld seconds ago)\n", i + 1, peers[i].ip,
+               time(NULL) - peers[i].last_seen);
+      }
+    } else {
+      printf("\nNo peers discovered yet.");
+    }
+
+    pthread_mutex_unlock(&peers_mutex);
+    sleep(5);
+  }
+
+  return 0;
+}
+```
+
+
 ## Reference
 
 - [Beej's Guide to Networking](https://beej.us/guide/bgnet/html/split/index.html)
