@@ -20,7 +20,7 @@
 #define RESPONSE_PORT 9006
 #define DISCOVERY_INTERVAL 5
 #define STALE_PEER_TIMEOUT 15
-#define BROADCAST_IP "255.255.255.255"
+#define BROADCAST_IP "192.168.0.255"
 
 /**
  * Each of the discovered peers.
