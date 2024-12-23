@@ -1,9 +1,11 @@
 #include "broadcast.h"
 #include "netutils.h"
 #include "protocol.h"
+#include <pthread.h>
+#include <stdlib.h>
 
 // Initialize global variables
-Peer peers[MAX_PEERS];
+Peer *peers = NULL;
 int peer_count = 0;
 pthread_mutex_t peers_mutex = PTHREAD_MUTEX_INITIALIZER;
 
@@ -34,6 +36,7 @@ void init_peer(Peer *peer, const char *ip, const char *token,
   peer->username[MAX_USERNAME_LENGTH] = '\0';
 
   peer->last_seen = time(NULL);
+  peer->next = NULL;
 }
 
 void update_peer(const char *ip, const char *token, const char *username) {
@@ -41,32 +44,70 @@ void update_peer(const char *ip, const char *token, const char *username) {
 
   // Check if peer already exists by token.
   // Update the last_seen, IP and username if so.
+  Peer *peer = peers;
   int found = 0;
-  for (int i = 0; i < peer_count; i++) {
-    if (strcmp(peers[i].token, token) == 0) {
-      peers[i].last_seen = time(NULL);
+
+  while (peer != NULL && !found) {
+    if (strcmp(peer->token, token) == 0) {
+      peer->last_seen = time(NULL);
 
       // Check if the IP has changed
-      if (strcmp(peers[i].ip, ip)) {
-        strncpy(peers[i].ip, ip, INET_ADDRSTRLEN - 1);
-        peers[i].ip[INET_ADDRSTRLEN - 1] = '\0';
+      if (strcmp(peer->ip, ip)) {
+        strncpy(peer->ip, ip, INET_ADDRSTRLEN - 1);
+        peer->ip[INET_ADDRSTRLEN - 1] = '\0';
       }
 
       // Check if the username has changed
-      if (strcmp(peers[i].username, username)) {
-        strncpy(peers[i].username, username, MAX_USERNAME_LENGTH);
-        peers[i].username[MAX_USERNAME_LENGTH] = '\0';
+      if (strcmp(peer->username, username)) {
+        strncpy(peer->username, username, MAX_USERNAME_LENGTH);
+        peer->username[MAX_USERNAME_LENGTH] = '\0';
       }
 
       found = 1;
-      break;
     }
+
+    peer = peer->next;
   }
 
-  // If the peer is new, add it if there is space
-  if (!found && peer_count < MAX_PEERS) {
-    init_peer(&peers[peer_count], ip, token, username);
+  // If the peer is new, add it to the beginning of the list
+  if (!found) {
+    peer = malloc(sizeof(Peer));
+    init_peer(peer, ip, token, username);
+
+    Peer *prev_head = peers;
+    peers = peer;
+    peer->next = prev_head;
+
     peer_count++;
+  }
+
+  pthread_mutex_unlock(&peers_mutex);
+}
+
+void remove_stale_peers() {
+  pthread_mutex_lock(&peers_mutex);
+
+  time_t current_time = time(NULL);
+  Peer *peer = peers;
+  Peer *previous = NULL;
+
+  while (peer != NULL) {
+    if (current_time - peer->last_seen > STALE_PEER_TIMEOUT) {
+      if (previous == NULL) {
+        // Removing the head of the list
+        peers = peer->next;
+      } else {
+        // Removing an item after the head of the list
+        previous->next = peer->next;
+      }
+
+      Peer *temp = peer;
+      peer = peer->next;
+      free(temp);
+    } else {
+      previous = peer;
+      peer = peer->next;
+    }
   }
 
   pthread_mutex_unlock(&peers_mutex);

@@ -17,9 +17,12 @@ int main() {
     pthread_mutex_lock(&peers_mutex);
     if (peer_count > 0) {
       printf("\nCurrent peers (%d):\n", peer_count);
-      for (int i = 0; i < peer_count; i++) {
-        printf("\t%d. %s (last seen: %ld seconds ago)\n", i + 1, peers[i].ip,
-               time(NULL) - peers[i].last_seen);
+      Peer *peer = peers;
+      while (peer != NULL) {
+        printf("\t%s at %s (last seen: %ld seconds ago)\n", peer->username,
+               peer->ip, time(NULL) - peer->last_seen);
+
+        peer = peer->next;
       }
     } else {
       printf("\nNo peers discovered yet.");
