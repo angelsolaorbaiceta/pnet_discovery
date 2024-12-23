@@ -50,6 +50,8 @@ void update_peer(const char *ip, const char *token, const char *username) {
   while (peer != NULL && !found) {
     if (strcmp(peer->token, token) == 0) {
       peer->last_seen = time(NULL);
+      printf("Updated last_seen for %s to %ld\n", peer->username,
+             peer->last_seen);
 
       // Check if the IP has changed
       if (strcmp(peer->ip, ip)) {
@@ -104,6 +106,8 @@ void remove_stale_peers() {
       Peer *temp = peer;
       peer = peer->next;
       free(temp);
+
+      peer_count--;
     } else {
       previous = peer;
       peer = peer->next;
