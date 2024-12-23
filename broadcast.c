@@ -196,9 +196,7 @@ void *send_broadcast(void *arg) {
 
   while (1) {
     sendto(sock, buffer, msg_length, 0, (struct sockaddr *)&addr, sizeof(addr));
-
-    // TODO: cleanup stale peers
-
+    remove_stale_peers();
     sleep(DISCOVERY_INTERVAL);
   }
 }
